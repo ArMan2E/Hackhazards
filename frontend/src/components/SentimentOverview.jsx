@@ -1,6 +1,7 @@
 import { TrendingUp , Minus , TrendingDown} from "lucide-react";
 
 const SentimentOverview = ({ mockData }) => {
+  console.log("Inside sentiment overview ", mockData)
   // Calculate sentiment counts
   const total = mockData.length;
 
@@ -11,8 +12,8 @@ const SentimentOverview = ({ mockData }) => {
   };
 
   mockData.forEach((item) => {
-    if (sentimentCount[item.groqAnalysis.sentiment] !== undefined) {
-      sentimentCount[item.groqAnalysis.sentiment]++;
+    if (sentimentCount[item.sentiment] !== undefined) {
+      sentimentCount[item.sentiment]++;
     }
   });
 

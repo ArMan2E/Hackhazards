@@ -21,10 +21,11 @@ const sentimentColors = {
 };
 
 // Format time for X-axis
-const formatTime = (date) =>
-  new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+// const formatTime = (date) =>
+//    new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 const SentimentTrendGraph = ({ data }) => {
+  console.log("inside sentiment trend graph ", data)
   const [activeSentiment, setActiveSentiment] = useState(null);
   const [graphData, setGraphData] = useState([]);
 
@@ -32,8 +33,8 @@ const SentimentTrendGraph = ({ data }) => {
     if (!Array.isArray(data) || data.length === 0) return;
 
     const trends = data.map((entry) => {
-      const time = formatTime(entry.pubDate);
-      const sentiment = entry?.groqAnalysis?.sentiment;
+      const time = entry.pubDate;
+      const sentiment = entry?.sentiment;
 
       return {
         time,
