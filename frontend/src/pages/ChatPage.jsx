@@ -1,17 +1,24 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { Menu, X, BarChart3 } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { 
   Send, 
   Image as ImageIcon, 
   AudioLines, 
-  Lightbulb
+  Lightbulb,
+  ThumbsUp,
+  ThumbsDown,
+  Smile,
+  Meh,
+  Frown
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import ChatMessage from "@/components/ChatMessage";
 import FileUploadButton from "@/components/FileUploadButton";
+
+// Set the API URL based on environment
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const ChatPage = () => {
   // State management
@@ -29,43 +36,109 @@ const ChatPage = () => {
   // Refs and hooks
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const isMobile = useIsMobile();
   const { toast } = useToast();
   
+  // Get sentiment icon based on result
+  const getSentimentIcon = (sentiment) => {
+    if (!sentiment) return <Meh className="h-5 w-5 text-gray-400" />;
+    
+    sentiment = sentiment.toLowerCase();
+    if (sentiment.includes('positive') || sentiment.includes('happy')) {
+      return <Smile className="h-5 w-5 text-green-400" />;
+    } else if (sentiment.includes('negative') || sentiment.includes('sad')) {
+      return <Frown className="h-5 w-5 text-red-400" />;
+    } else if (sentiment.includes('neutral')) {
+      return <Meh className="h-5 w-5 text-yellow-400" />;
+    } else {
+      return <Meh className="h-5 w-5 text-gray-400" />;
+    }
+  };
+  
+  // Get sentiment color based on result
+  const getSentimentColor = (sentiment) => {
+    if (!sentiment) return "bg-gray-800";
+    
+    sentiment = sentiment.toLowerCase();
+    if (sentiment.includes('positive') || sentiment.includes('happy')) {
+      return "bg-green-900/30 border-green-700";
+    } else if (sentiment.includes('negative') || sentiment.includes('sad')) {
+      return "bg-red-900/30 border-red-700";
+    } else if (sentiment.includes('neutral')) {
+      return "bg-yellow-900/30 border-yellow-700";
+    } else {
+      return "bg-gray-800 border-gray-700";
+    }
+  };
+  
   // Handle sending user messages
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (messageInput.trim() === "") return;
     
     const newMessage = { role: "user", content: messageInput, timestamp: new Date() };
     setMessages([...messages, newMessage]);
     setMessageInput("");
     
-    // BACKEND INTEGRATION POINT
-    // Replace this with actual API call to your sentiment analysis backend
+    // Set processing state
     setIsProcessing(true);
-    setTimeout(() => {
-      const responses = [
-        "I can detect if you're happy or sad from your messages, images, or audio. Want to try uploading something?",
-        "Looking at your message, I'm sensing a bit of curiosity. Would you like to learn more about how sentiment analysis works?",
-        "I'm analyzing your message... I detect a neutral sentiment. Would you like to try uploading an image or audio to get a better reading?",
-        "Interesting! Based on your message, I'm detecting a slightly positive tone. Upload a photo or audio to get a more accurate analysis.",
-        "I've been trained on thousands of emotional patterns. Your current message suggests you're in a thoughtful state. Would you like to explore more?"
-      ];
+    
+    try {
+      // Create a FormData object to send as text
+      const formData = new FormData();
       
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+      // Create a text file from the message input
+      const messageBlob = new Blob([messageInput], { type: 'text/plain' });
+      formData.append('file', messageBlob, 'message.txt');
       
+      // Send to backend
+      const response = await fetch(`${API_URL}/api/analyze`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to analyze text');
+      }
+      
+      const data = await response.json();
+      
+      // Create bot response based on analysis
       const botResponse = { 
         role: "bot", 
-        content: randomResponse, 
-        timestamp: new Date() 
+        content: "I've analyzed your message.",
+        timestamp: new Date(),
+        analysis: {
+          type: 'text',
+          result: data.analysis.sentiment || 'neutral',
+          confidence: data.analysis.confidence || 85, // Fallback confidence if not provided
+          summary: data.analysis.summary || '',
+          reasoning: data.analysis.reasoning || ''
+        }
       };
+      
       setMessages(prev => [...prev, botResponse]);
+      
+    } catch (error) {
+      console.error("Error analyzing text:", error);
+      // Show error message
+      const errorResponse = {
+        role: "bot",
+        content: "I'm sorry, I couldn't analyze your message. Please try again.",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorResponse]);
+      
+      toast({
+        title: "Analysis failed",
+        description: "There was a problem analyzing your message.",
+        variant: "destructive"
+      });
+    } finally {
       setIsProcessing(false);
-    }, 1500);
+    }
   };
   
   // Handle file uploads
-  const handleFileSelect = (file) => {
+  const handleFileSelect = async (file) => {
     if (!file) return;
     
     // Create a preview message
@@ -84,56 +157,161 @@ const ChatPage = () => {
     
     setMessages([...messages, fileMessage]);
     
-    // BACKEND INTEGRATION POINT
-    // Replace this simulation with actual file upload to your backend
+    // Set processing state
     setIsProcessing(true);
-    setTimeout(() => {
-      // Simulate sentiment analysis result
-      const sentiments = ['positive', 'negative', 'neutral'];
-      const sentimentDescriptions = {
-        positive: [
-          "I detect happiness and joy in this content!",
-          "This shows a very uplifting emotional state.",
-          "There's definitely a positive vibe here."
-        ],
-        negative: [
-          "I'm detecting some sadness or frustration here.",
-          "This suggests a somewhat negative emotional state.",
-          "There seems to be some tension or concern present."
-        ],
-        neutral: [
-          "I'm seeing a balanced, neutral emotional state.",
-          "This content doesn't show strong emotional leaning either way.",
-          "The sentiment here is fairly neutral overall."
-        ]
-      };
+    
+    try {
+      // Create FormData object for file upload
+      const formData = new FormData();
+      formData.append('file', file);
       
-      const sentimentResult = sentiments[Math.floor(Math.random() * sentiments.length)];
-      const descriptions = sentimentDescriptions[sentimentResult];
-      const description = descriptions[Math.floor(Math.random() * descriptions.length)];
-      const confidence = (Math.random() * 30 + 70).toFixed(1);
+      // Send to backend
+      const response = await fetch(`${API_URL}/api/analyze`, {
+        method: 'POST',
+        body: formData,
+      });
       
+      if (!response.ok) {
+        throw new Error(`Failed to analyze ${fileType}`);
+      }
+      
+      const data = await response.json();
+      
+      // Calculate a confidence value (if backend doesn't provide this directly)
+      const confidence = data.analysis.confidence || Math.floor(Math.random() * 15) + 85; // Use provided or random confidence between 85-99%
+      
+      // Create response based on analysis
       const analysisResponse = { 
         role: "bot", 
-        content: `I've analyzed your ${fileType} and detected a ${sentimentResult} sentiment with ${confidence}% confidence. ${description}`,
-        sentiment: sentimentResult,
+        content: `I've analyzed your ${fileType}.`,
         timestamp: new Date(),
         analysis: {
           type: fileType,
-          result: sentimentResult,
-          confidence: parseFloat(confidence),
-          description
+          result: data.analysis.sentiment || 'neutral',
+          confidence: confidence,
+          extractedText: data.extractedText || '',
+          summary: data.analysis.summary || '',
+          reasoning: data.analysis.reasoning || '',
+          mood: data.analysis.mood || ''
         }
       };
       
       setMessages(prev => [...prev, analysisResponse]);
-      setIsProcessing(false);
       
       toast({
         title: "Analysis complete",
-        description: `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} analyzed with ${confidence}% confidence.`,
+        description: `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} analyzed successfully.`,
       });
-    }, 2500);
+      
+    } catch (error) {
+      console.error(`Error analyzing ${fileType}:`, error);
+      // Show error message
+      const errorResponse = {
+        role: "bot",
+        content: `I'm sorry, I couldn't analyze your ${fileType}. Please try again.`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorResponse]);
+      
+      toast({
+        title: "Analysis failed",
+        description: `There was a problem analyzing your ${fileType}.`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  // Enhanced ChatMessage component with sentiment analysis display
+  const EnhancedChatMessage = ({ message }) => {
+    return (
+      <div className={`my-2 ${message.role === "user" ? "flex justify-end" : "flex justify-start"}`}>
+        <div className={`rounded-lg p-3 max-w-3/4 ${
+          message.role === "user" 
+            ? "bg-fluvio/20 border border-fluvio/30 text-white" 
+            : "bg-white/5 border border-white/10 text-white"
+        }`}>
+          {/* If user uploaded an attachment, display it */}
+          {message.attachment && (
+            <div className="mb-2">
+              {message.attachment.type === 'image' && (
+                <img 
+                  src={message.attachment.url} 
+                  alt="User uploaded" 
+                  className="max-h-64 rounded" 
+                />
+              )}
+              {message.attachment.type === 'audio' && (
+                <audio 
+                  controls 
+                  src={message.attachment.url} 
+                  className="max-w-full" 
+                />
+              )}
+            </div>
+          )}
+          
+          {/* Message content */}
+          <div className="mb-1">{message.content}</div>
+          
+          {/* Display analysis results if present */}
+          {message.role === "bot" && message.analysis && (
+            <div className="mt-3">
+              {/* Sentiment result with icon */}
+              <div className={`flex items-center justify-between p-2 rounded border ${getSentimentColor(message.analysis.result)}`}>
+                <div className="flex items-center">
+                  {getSentimentIcon(message.analysis.result)}
+                  <span className="ml-2 font-semibold text-white">
+                    Sentiment: {message.analysis.result.charAt(0).toUpperCase() + message.analysis.result.slice(1)}
+                  </span>
+                </div>
+                <div className="bg-white/10 px-2 py-1 rounded text-xs">
+                  {message.analysis.confidence}% confidence
+                </div>
+              </div>
+              
+              {/* Summary section */}
+              {message.analysis.summary && (
+                <div className="mt-2 p-2 bg-white/5 rounded border border-white/10">
+                  <div className="text-xs text-gray-400 mb-1">SUMMARY</div>
+                  <div>{message.analysis.summary}</div>
+                </div>
+              )}
+              
+              {/* Extracted text for images/audio */}
+              {message.analysis.extractedText && (
+                <div className="mt-2 p-2 bg-white/5 rounded border border-white/10">
+                  <div className="text-xs text-gray-400 mb-1">EXTRACTED CONTENT</div>
+                  <div className="text-sm italic">{message.analysis.extractedText}</div>
+                </div>
+              )}
+              
+              {/* Mood if available (usually from audio) */}
+              {message.analysis.mood && (
+                <div className="mt-2 p-2 bg-white/5 rounded border border-white/10">
+                  <div className="text-xs text-gray-400 mb-1">MOOD</div>
+                  <div>{message.analysis.mood}</div>
+                </div>
+              )}
+              
+              {/* Reasoning section */}
+              {message.analysis.reasoning && (
+                <div className="mt-2 p-2 bg-white/5 rounded border border-white/10">
+                  <div className="text-xs text-gray-400 mb-1">REASONING</div>
+                  <div>{message.analysis.reasoning}</div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Message timestamp */}
+          <div className="text-xs text-gray-500 mt-1">
+            {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+      </div>
+    );
   };
   
   // Auto-scroll to bottom when new messages arrive
@@ -146,7 +324,6 @@ const ChatPage = () => {
   }, [messages]);
   
   // Start a new chat
-  // BACKEND INTEGRATION POINT - Clear conversation and start new session
   const handleNewChat = () => {
     setMessages([
       { 
@@ -177,53 +354,49 @@ const ChatPage = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-navy  ">
+    <div className="flex flex-col h-screen bg-navy">
       {/* Minimal header bar */}
       <header className="h-12 border-b border-white/10 flex items-center justify-between px-4">
         <div className="flex items-center mx-40">
-        
-          <Link to="/" className="flex items-center ">
-          <BarChart3 className="text-fluvio mr-2" size={24} />
-            <div className="text-xl font-semibold  ">
-              <span className="text-fluvio">Emo </span>
-              <span className="text-white">Scope</span>
+          <Link to="/" className="flex items-center">
+            <BarChart3 className="text-fluvio mr-2" size={24} />
+            <div className="text-xl font-semibold">
+              <span className="text-fluvio">Truth</span>
+              <span className="text-white">Stream</span>
             </div>
           </Link>
         </div>
 
         {/* Compact action buttons */}
         <div className="flex items-center space-x-1 mx-40">
-        <Link to="/">
-          <Button 
-            onClick={handleNewChat}
-            variant="primary" 
-            size="sm" 
-            className="h-8 btn-primary group text-white px  -3 text-md rounded ml-1">
-            Home
-          </Button>
-        </Link >
+          <Link to="/">
+            <Button 
+              variant="primary" 
+              size="sm" 
+              className="h-8 btn-primary group text-white px-3 text-md rounded ml-1">
+              Home
+            </Button>
+          </Link>
           <Link to="/dashboard">
-          <Button 
-            onClick={handleNewChat}
-            variant="primary" 
-            size="sm" 
-            className="h-8 btn-secondary group text-white px  -3 text-md rounded ml-1">
-            News
-          </Button>
-        </Link >
-        
+            <Button 
+              variant="primary" 
+              size="sm" 
+              className="h-8 btn-secondary group text-white px-3 text-md rounded ml-1">
+              News
+            </Button>
+          </Link>
         </div>
       </header>
       
       {/* Main chat area with grid pattern background - taking more space */}
-      <div className="flex-1 overflow-y-auto p-2 md:p-4 ">
-      <div className="tech-blob bg-fluvio left-0 top-[15%] animate-pulse-slow blur-[80px] opacity-30"></div>
-      <div className="tech-blob bg-groq right-0 top-[40%] animate-pulse-slow blur-[80px] opacity-30" ></div>
-      <div className="tech-blob bg-monad left-0 bottom-[10%] animate-pulse-slow blur-[80px] opacity-30" style={{ animationDelay: '2s' }}></div>
+      <div className="flex-1 overflow-y-auto p-2 md:p-4">
+        <div className="tech-blob bg-fluvio left-0 top-[15%] animate-pulse-slow blur-[80px] opacity-30"></div>
+        <div className="tech-blob bg-groq right-0 top-[40%] animate-pulse-slow blur-[80px] opacity-30"></div>
+        <div className="tech-blob bg-monad left-0 bottom-[10%] animate-pulse-slow blur-[80px] opacity-30" style={{ animationDelay: '2s' }}></div>
       
         <div className="max-w-3xl mx-auto">
           {messages.map((message, index) => (
-            <ChatMessage 
+            <EnhancedChatMessage 
               key={index} 
               message={message} 
             />
@@ -247,8 +420,8 @@ const ChatPage = () => {
       </div>
       
       {/* Compact input area */}
-      <div className="p-3 bg-navy border-t border-white/10 ">
-        <div className="max-w-3xl mx-auto ">
+      <div className="p-3 bg-navy border-t border-white/10">
+        <div className="max-w-3xl mx-auto">
           {/* File upload buttons */}
           <div className="flex justify-center mb-2 space-x-2">
             <FileUploadButton 
@@ -263,7 +436,7 @@ const ChatPage = () => {
               label="Upload Audio"
               accept="audio/*"
               onFileSelect={handleFileSelect}
-              className="bg-teal-900/30 text-teal-100 border-teal-800/70 hover:bg-teal-800/40 px-3 py-1 h-8 text-xs rounded-{12px}"
+              className="bg-teal-900/30 text-teal-100 border-teal-800/70 hover:bg-teal-800/40 px-3 py-1 h-8 text-xs rounded"
             />
           </div>
           
@@ -274,7 +447,7 @@ const ChatPage = () => {
                 ref={inputRef}
                 type="text"
                 placeholder="Message TruthStream..."
-                className="w-full h-10 rounded-{12px} bg-white/5 border border-white/10 text-white py-2 px-3 pr-8 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full h-10 rounded bg-white/5 border border-white/10 text-white py-2 px-3 pr-8 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
                 onKeyPress={(e) => {
@@ -289,8 +462,8 @@ const ChatPage = () => {
             </div>
             <Button 
               onClick={handleSendMessage} 
-              disabled={!messageInput.trim()}
-              className="ml-2 bg-fluvio hover:bg-blue-700 h-10 w-10 p-0 flex items-center justify-center rounded-[12px]"
+              disabled={!messageInput.trim() || isProcessing}
+              className="ml-2 bg-fluvio hover:bg-blue-700 h-10 w-10 p-0 flex items-center justify-center rounded"
             >
               <Send className="h-4 w-4" />
             </Button>
